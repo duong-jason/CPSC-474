@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
-# Jason Duong
 
-# NOTE: To run the program with K-processes, use the command
-# mpiexec -n <K> --timeout 120 python3 mpirf.y
+"""A Distributed Random Forest Algorithm"""
 
 from mpi4py import MPI
 
@@ -29,6 +27,7 @@ size = comm.Get_size()
 class Node:
     def __init__(
         self,
+        *,
         feature=None,
         data=None,
         branch=None,
@@ -58,9 +57,13 @@ class Node:
 
 class DecisionTree:
     """A Rudimentary Decision Tree Classifier"""
-    def __init__(self):
+    def __init__(self, *, criterion=None):
+        """
+        Pre-pruning criterion = {max_depth, partition_threshold, low_gain}
+        """
         self.root = None
         self.levels = None
+        self.criterion = criterion
 
     def __repr__(self, node=None, depth=0):
         """Displays the decision tree"""
@@ -92,37 +95,60 @@ class DecisionTree:
         """Measures the reduction in the overall entropy in (X, y) achieved by testing on feature (d)"""
         return self.entropy(X, y) - self.rem(X, y, d)
 
-    def build_tree(self, X, y, *, parent=None, branch=None):
+    def build_tree(self, X, y, *, parent=None, branch=None, depth=0):
         """Performs the ID3 algorithm"""
         if len(y.unique()) == 1:  # all instances have the same target feature values
-            best_node = Node(feature=y.iat[0],
-                             data=pd.concat([X, y], axis=1),
-                             branch=branch,
-                             parent=parent,
-                             leaf=True)
+            return Node(feature=y.iat[0],
+                        data=pd.concat([X, y], axis=1),
+                        branch=branch,
+                        parent=parent,
+                        leaf=True)
         elif X.empty:  # dataset is empty, return a leaf node labeled with the majority class of the parent
-            best_node = Node(feature=mode(parent.y),
-                              branch=branch,
-                              parent=parent,
-                              leaf=True)
+            return Node(feature=mode(parent.y),
+                        branch=branch,
+                        parent=parent,
+                        leaf=True)
         elif all((X[d] == X[d].iloc[0]).all() for d in X.columns):  # if all feature values are identical
-            best_node = Node(feature=mode(y),
-                             data=pd.concat([X, y], axis=1),
-                             branch=branch,
-                             parent=parent,
-                             leaf=True)
+                return Node(feature=mode(y),
+                            data=pd.concat([X, y], axis=1),
+                            branch=branch,
+                            parent=parent,
+                            leaf=True)
+        elif self.criterion.get("max_depth"):
+            if depth >= self.criterion["max_depth"]:
+                return Node(feature=mode(y),
+                            data=pd.concat([X, y], axis=1),
+                            branch=branch,
+                            parent=parent,
+                            leaf=True)
+        elif self.criterion.get("partition_threshold"):
+            if len(X) < self.criterion["partition_threshold"]:
+                return Node(feature=mode(y),
+                            data=pd.concat([X, y], axis=1),
+                            branch=branch,
+                            parent=parent,
+                            leaf=True)
 
-        else:
-            best_feature = X.columns[np.argmax([self.information_gain(X, y, d) for d in X.columns])]
-            best_node = deepcopy(Node(feature=best_feature,
-                                 data=pd.concat([X, y], axis=1),
-                                 branch=branch,
-                                 parent=parent))
+        gain = np.argmax([self.information_gain(X, y, d) for d in X.columns])
 
-            partitions = [self.partition(X, y, best_feature, t) for t in self.levels[best_feature]]
+        if self.criterion.get('low_gain'):
+            if gain <= self.criterion["low_gain"]:
+                return Node(feature=mode(y),
+                            data=pd.concat([X, y], axis=1),
+                            branch=branch,
+                            parent=parent,
+                            leaf=True)
 
-            for *d, t in partitions:
-                best_node.children.append(self.build_tree(*d, parent=best_node, branch=t))
+        best_feature = X.columns[gain]
+        best_node = deepcopy(Node(feature=best_feature,
+                                  data=pd.concat([X, y], axis=1),
+                                  branch=branch,
+                                  parent=parent))
+
+        partitions = [self.partition(X, y, best_feature, t) for t in self.levels[best_feature]]
+
+        for *d, t in partitions:
+            best_node.children.append(self.build_tree(*d, parent=best_node, branch=t, depth=depth+1))
         return best_node
 
     def fit(self, X, y):
@@ -145,9 +171,10 @@ class DecisionTree:
 
 
 class RandomForest:
-    def __init__(self, n_sample=2):
+    def __init__(self, n_sample=2, criterion=None):
         self.n_sample = n_sample
         self.tree = None
+        self.criterion = criterion
 
     def sub_sample(self, X, n_sample=2):
         """Enforces feature randomness"""
@@ -160,7 +187,7 @@ class RandomForest:
         return d.iloc[:, :-1][feature_subset], d.iloc[:, -1]
 
     def fit(self, X, y):
-        self.tree = DecisionTree().fit(*self.bootstrap_sample(X, y, self.n_sample))
+        self.tree = DecisionTree(criterion=self.criterion).fit(*self.bootstrap_sample(X, y, self.n_sample))
         return self
 
     def predict(self, X):
@@ -196,7 +223,8 @@ if __name__ == '__main__':
     comm.Barrier()
     start_time = MPI.Wtime()
 
-    rf = RandomForest(n_sample=len(X_train)).fit(X_train, y_train)
+    rf = RandomForest(n_sample=len(X_train), criterion={'max_depth': 4})
+    rf.fit(X_train, y_train)
     score = rf.score(X_test, y_test)
 
     end_time = MPI.Wtime()
