@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Jason Duong
+
+# NOTE: To run the program with K-processes, use the command
+# mpiexec -n <K> --timeout 120 python3 mpirf.y
 
 from mpi4py import MPI
 
@@ -23,7 +27,15 @@ size = comm.Get_size()
 
 
 class Node:
-    def __init__(self, feature=None, data=None, branch=None, parent=None, leaf=False, children=[]):
+    def __init__(
+        self,
+        feature=None,
+        data=None,
+        branch=None,
+        parent=None,
+        leaf=False,
+        children=[]
+    ):
         self.feature = feature
         self.data = data
         self.branch = branch
@@ -42,7 +54,6 @@ class Node:
     @property
     def y(self):
         return self.data.iloc[:, -1]
-
 
 
 class DecisionTree:
@@ -79,31 +90,22 @@ class DecisionTree:
 
     def information_gain(self, X, y, d):
         """Measures the reduction in the overall entropy in (X, y) achieved by testing on feature (d)"""
-        if debug:
-            print(f"{d} = {self.entropy(X, y):.3f} - {self.rem(X, y, d):.3f} = {self.entropy(X, y) - self.rem(X, y, d):.3f}") 
-
         return self.entropy(X, y) - self.rem(X, y, d)
 
     def build_tree(self, X, y, *, parent=None, branch=None):
         """Performs the ID3 algorithm"""
         if len(y.unique()) == 1:  # all instances have the same target feature values
-            if debug:
-                print("All instances have the same target feature value\n")
             best_node = Node(feature=y.iat[0],
                              data=pd.concat([X, y], axis=1),
                              branch=branch,
                              parent=parent,
                              leaf=True)
         elif X.empty:  # dataset is empty, return a leaf node labeled with the majority class of the parent
-            if debug:
-                print("Dataset is empty\n")
-            best_node =  Node(feature=mode(parent.y),
+            best_node = Node(feature=mode(parent.y),
                               branch=branch,
                               parent=parent,
                               leaf=True)
         elif all((X[d] == X[d].iloc[0]).all() for d in X.columns):  # if all feature values are identical
-            if debug:
-                print("All instances have the same descriptive features\n")
             best_node = Node(feature=mode(y),
                              data=pd.concat([X, y], axis=1),
                              branch=branch,
@@ -111,27 +113,15 @@ class DecisionTree:
                              leaf=True)
 
         else:
-            if debug:
-                print("===Information Gain===")
             best_feature = X.columns[np.argmax([self.information_gain(X, y, d) for d in X.columns])]
             best_node = deepcopy(Node(feature=best_feature,
                                  data=pd.concat([X, y], axis=1),
                                  branch=branch,
                                  parent=parent))
 
-            if debug:
-                print()
-                print("===Best Feature===")
-                print(best_feature)
-                print()
-
             partitions = [self.partition(X, y, best_feature, t) for t in self.levels[best_feature]]
 
             for *d, t in partitions:
-                if debug:
-                    print(f"===Partitioned Dataset ({t})===")
-                    print(pd.concat([*d], axis=1).head())
-                    print()
                 best_node.children.append(self.build_tree(*d, parent=best_node, branch=t))
         return best_node
 
@@ -155,74 +145,41 @@ class DecisionTree:
 
 
 class RandomForest:
-    def __init__(self, n_estimators=5, n_sample=2):
-        self.n_estimators = n_estimators
+    def __init__(self, n_sample=2):
         self.n_sample = n_sample
         self.tree = None
 
-    def __repr__(self):
-        for i, dt in enumerate(self.forest, start=1):
-            print(f"===Decision Tree  #{i}===")
-            print(dt)
-        print()
-        return ""
-
-    def subsample(self, X, n_sample=2):
+    def sub_sample(self, X, n_sample=2):
         """Enforces feature randomness"""
         return np.random.choice(X.columns.to_numpy(), n_sample, replace=False)
 
-    def make_bootstrap(self, X, y, n_sample, key=True):
-        feature_subset = self.subsample(X, int(np.log2(len(X))))
+    def bootstrap_sample(self, X, y, n_sample, key=True):
+        feature_subset = self.sub_sample(X, int(np.log2(len(X))))
         d = pd.concat([X, y], axis=1)
         d = d.sample(n=n_sample, replace=key)
         return d.iloc[:, :-1][feature_subset], d.iloc[:, -1]
 
     def fit(self, X, y):
-        self.tree = DecisionTree().fit(*self.make_bootstrap(X, y, self.n_sample))
+        self.tree = DecisionTree().fit(*self.bootstrap_sample(X, y, self.n_sample))
         return self
 
-    def predict(self, x):
-        """Aggregation"""
-        # assert all(isinstance(model, DecisionTree) for model in self.forest)
-
-        pred = [None] * size
-
-        if not rank:
-            print("Process 0 is now scattering")
-        pred = comm.scatter(pred, root=0)
-
-        print(f"Process {rank} is predicting")
-        # each process constitutes onepred 
-        pred = self.tree.predict(x)
-        print(f"Process {rank} predicted {pred}")
-
-        comm.Barrier()
-
-        if rank == 0:
-            print("All Process is done predicting")
-            print(f"Process 0 is now gathering")
-
-        votes = comm.allgather(pred)
-
-        print(f"Rank {rank} has Votes={votes}")
-
-        return mode(votes)
-        # return mode([dt.predict(X) for dt in self.forest])
+    def predict(self, X):
+        return [self.tree.predict(X.iloc[x].to_frame().T) for x in range(len(X))]
 
     def score(self, X, y):
-        # for each test sample, all trees decide on the final prediction
-        y_hat = self.predict(X.iloc[0].to_frame().T)
-        # y_hat = [self.predict(X.iloc[x].to_frame().T) for x in range(len(X))]
-        # if rank == 0:
-        #     return accuracy_score(y, y_hat)
-        return y_hat
+        buf = []
+        buf.append(comm.bcast(self.predict(X), root=rank))
+
+        # Wait for all processes to finish making their predictions
+        comm.Barrier()
+
+        y_hat = list(map(lambda f: mode(f), np.array(buf).T))
+        return accuracy_score(y, y_hat)
 
 
 if __name__ == '__main__':
-    data = load_breast_cancer(as_frame=True)
-    X, y = data.data, data.target
-
-    debug = 0
+    cancer = load_breast_cancer(as_frame=True)
+    X, y = cancer.data, cancer.target
 
     # Source: http://gnpalencia.org/optbinning/tutorials/tutorial_binary.html
     for d in X.columns:
@@ -240,9 +197,9 @@ if __name__ == '__main__':
     start_time = MPI.Wtime()
 
     rf = RandomForest(n_sample=len(X_train)).fit(X_train, y_train)
-    rf.score(X_test, y_test)
-    # print(rf.score(X_test, y_test))
+    score = rf.score(X_test, y_test)
 
     end_time = MPI.Wtime()
     if rank == 0:
+        print("Accuracy Score:", score)
         print("Execution Time:", end_time-start_time)
