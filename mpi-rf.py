@@ -13,15 +13,13 @@ from sklearn.metrics import accuracy_score
 
 from optbinning import OptimalBinning
 
+
 pd.set_option('mode.chained_assignment', None)
 
 
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
-
-
-
 
 
 class Node:
@@ -160,7 +158,6 @@ class RandomForest:
     def __init__(self, n_estimators=5, n_sample=2):
         self.n_estimators = n_estimators
         self.n_sample = n_sample
-        # self.forest = []
         self.tree = None
 
     def __repr__(self):
@@ -181,23 +178,44 @@ class RandomForest:
         return d.iloc[:, :-1][feature_subset], d.iloc[:, -1]
 
     def fit(self, X, y):
-        tree = DecisionTree().fit(*self.make_bootstrap(X, y, self.n_sample))
-
-        # self.forest = [DecisionTree().fit(*self.make_bootstrap(X, y, self.n_sample))
-        #                for _ in range(self.n_estimators)]
+        self.tree = DecisionTree().fit(*self.make_bootstrap(X, y, self.n_sample))
         return self
 
     def predict(self, x):
         """Aggregation"""
         # assert all(isinstance(model, DecisionTree) for model in self.forest)
-        tree.predict(X)
+
+        pred = [None] * size
+
+        if not rank:
+            print("Process 0 is now scattering")
+        pred = comm.scatter(pred, root=0)
+
+        print(f"Process {rank} is predicting")
+        # each process constitutes onepred 
+        pred = self.tree.predict(x)
+        print(f"Process {rank} predicted {pred}")
+
         comm.Barrier()
+
+        if rank == 0:
+            print("All Process is done predicting")
+            print(f"Process 0 is now gathering")
+
+        votes = comm.allgather(pred)
+
+        print(f"Rank {rank} has Votes={votes}")
+
+        return mode(votes)
         # return mode([dt.predict(X) for dt in self.forest])
 
     def score(self, X, y):
-        y_hat = [self.predict(X.iloc[x].to_frame().T) for x in range(len(X))]
-        if rank == 0:
-            return accuracy_score(y, y_hat)
+        # for each test sample, all trees decide on the final prediction
+        y_hat = self.predict(X.iloc[0].to_frame().T)
+        # y_hat = [self.predict(X.iloc[x].to_frame().T) for x in range(len(X))]
+        # if rank == 0:
+        #     return accuracy_score(y, y_hat)
+        return y_hat
 
 
 if __name__ == '__main__':
@@ -218,6 +236,13 @@ if __name__ == '__main__':
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.20)
 
+    comm.Barrier()
+    start_time = MPI.Wtime()
+
     rf = RandomForest(n_sample=len(X_train)).fit(X_train, y_train)
-    print(f"Process {rank} Done")
+    rf.score(X_test, y_test)
     # print(rf.score(X_test, y_test))
+
+    end_time = MPI.Wtime()
+    if rank == 0:
+        print("Execution Time:", end_time-start_time)
