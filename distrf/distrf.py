@@ -6,8 +6,9 @@ from mpi4py import MPI
 
 import numpy as np
 import pandas as pd
-from statistics import mode
+from pathlib import Path
 from copy import deepcopy
+from statistics import mode
 
 from sklearn.datasets import load_breast_cancer
 from sklearn.model_selection import train_test_split
@@ -205,18 +206,24 @@ class RandomForest:
 
 
 if __name__ == '__main__':
-    cancer = load_breast_cancer(as_frame=True)
-    X, y = cancer.data, cancer.target
+    path = Path(r'/home/jason/Desktop/school/dc/distrf/dataset/cancer.pkl')
 
-    # Source: http://gnpalencia.org/optbinning/tutorials/tutorial_binary.html
-    for d in X.columns:
-        op = OptimalBinning(name=d, dtype="numerical", solver="cp")
-        op.fit(X[d].values, y)
-        bins = [0] + list(op.splits) + [X[d].max()]
-        X[d] = pd.cut(X[d], bins, labels=range(len(bins)-1))
+    if path.is_file():
+        cancer = pd.read_pickle(path)
+        X, y = cancer.iloc[:, :-1], cancer.iloc[:, -1]
+    else:
+        cancer = load_breast_cancer(as_frame=True)
+        X, y = cancer.data, cancer.target
 
-    for d in ['mean concavity', 'mean concave points', 'concavity error', 'concave points error', 'worst concavity', 'worst concave points']:
-        X[d].fillna(mode(X[d].values), inplace=True)
+        # Source: http://gnpalencia.org/optbinning/tutorials/tutorial_binary.html
+        for d in X.columns:
+            op = OptimalBinning(name=d, dtype="numerical", solver="cp")
+            op.fit(X[d].values, y)
+            bins = [0] + list(op.splits) + [X[d].max()]
+            X[d] = pd.cut(X[d], bins, labels=range(len(bins)-1))
+
+        for d in ['mean concavity', 'mean concave points', 'concavity error', 'concave points error', 'worst concavity', 'worst concave points']:
+            X[d].fillna(mode(X[d].values), inplace=True)
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.20)
 
