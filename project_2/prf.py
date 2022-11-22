@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 
-
-"""A Distributed Distributed Tree """
-
+"""A Distributed Random Forest Algorithm"""
 
 from mpi4py import MPI
 
 import numpy as np
 import pandas as pd
-from statistics import mode
 from copy import deepcopy
+from statistics import mode
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
@@ -54,7 +52,9 @@ class Node:
 class DecisionTree:
     """A Rudimentary Decision Tree Classifier"""
     def __init__(self, *, criterion=None):
-        """Pre-pruning criterion = {max_depth, partition_threshold, low_gain}"""
+        """
+        Pre-pruning criterion = {max_depth, partition_threshold, low_gain}
+        """
         self.root = None
         self.levels = None
         self.criterion = criterion
@@ -143,7 +143,6 @@ class DecisionTree:
 
         for *d, level in partitions:
             best_node.children.append(self.build_tree(*d, parent=best_node, branch=level, depth=depth+1))
-
         return best_node
 
     def fit(self, X, y):
@@ -160,48 +159,58 @@ class DecisionTree:
                     break
         return node.feature
 
-    def score(self, X):
-        return [self.predict(X.iloc[x].to_frame().T) for x in range(len(X))]
+    def score(self, X, y):
+        y_hat = [self.predict(X.iloc[x].to_frame().T) for x in range(len(X))]
+        return accuracy_score(y, y_hat)
 
 
-def voter(*argv):
-    if len(argv) == 1:
-        return argv[0]
-    for arg in argv:
-        if arg is None: continue
-        return list(map(lambda f: mode(f), list(zip(voter(arg)))))
+class RandomForest:
+    def __init__(self, n_sample=2, criterion=None):
+        self.n_sample = n_sample
+        self.criterion = criterion
+        self.tree = None
 
+    def sub_sample(self, X, n_sample=2):
+        """Enforces feature randomness"""
+        return np.random.choice(X.columns.to_numpy(), n_sample, replace=False)
 
-MPI_MODE = MPI.Op.Create(voter, commute=True)
+    def bootstrap_sample(self, X, y, n_sample, key=True):
+        feature_subset = self.sub_sample(X, int(np.log2(len(X.columns))))
+        d = pd.concat([X, y], axis=1)
+        d = d.sample(n=n_sample, replace=key)
+        return d.iloc[:, :-1][feature_subset], d.iloc[:, -1]
 
+    def fit(self, X, y):
+        self.tree = DecisionTree(criterion=self.criterion).fit(*self.bootstrap_sample(X, y, self.n_sample))
+        return self
 
-def sub_sample(X, n_sample=2):
-    """Enforces feature randomness"""
-    return np.random.choice(X.columns.to_numpy(), n_sample, replace=False)
+    def predict(self, X):
+        return [self.tree.predict(X.iloc[x].to_frame().T) for x in range(len(X))]
 
+    def score(self, X, y):
+        buf = []
+        buf.append(comm.bcast(self.predict(X), root=rank))
 
-def bootstrap_sample(X, y, n_sample, key=True):
-    feature_subset = self.sub_sample(X, int(np.log2(len(X))))
-    d = pd.concat([X, y], axis=1)
-    d = d.sample(n=n_sample, replace=key)
-    return d.iloc[:, :-1][feature_subset], d.iloc[:, -1]
+        comm.Barrier()  # Wait for all processes to finish making their predictions
+
+        y_hat = list(map(lambda f: mode(f), np.array(buf).T))
+        return accuracy_score(y, y_hat)
 
 
 if __name__ == '__main__':
-    df = pd.read_pickle(r'/Users/duong-jason/Desktop/dataset/cancer.pkl')
-    X, y = df.iloc[:, :-1], df.iloc[:, -1]
+    cancer = pd.read_pickle(r'/Users/duong-jason/Desktop/dc/project_2/dataset/cancer.pkl')
+    X, y = cancer.iloc[:, :-1], cancer.iloc[:, -1]
+
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.20)
 
     comm.Barrier()
     start_time = MPI.Wtime()
 
-    dt = DecisionTree(criterion={'max_depth': 4}).fit(*self.bootstrap_sample(X, y, self.n_sample))
-    score = dt.score(X_test)
-
-    comm.Barrier()
-    y_hat = comm.reduce(score, op=MPI_MODE, root=0)
+    rf = RandomForest(n_sample=len(X_train), criterion={'partition_threshold': 5})
+    rf.fit(X_train, y_train)
+    score = rf.score(X_test, y_test)
 
     end_time = MPI.Wtime()
-    if not rank:
-        print(f"Accuracy Score: {accuracy_score(y_test, y_hat)*100:.2f}%")
+    if rank == 0:
+        print(f"Accuracy Score = {score*100:.2f}")
         print(f"Execution Time: {end_time-start_time:.3f}s")
