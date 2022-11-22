@@ -1,9 +1,3 @@
-# Distributed Random Forest
+# CPSC-474
 
-## How to Run
-```bash
-mpiexec -n <K> --timeout 120 python3 distf.py
-```
-
-## Experiment
-Testing with K=5, execution time decreased from 45.8s to 3.01s
+Concepts of distributed computing; distributed memory and shared memory architectures; parallel programming techniques; inter-process communication and synchronization; programming for parallel architectures such as multi-core and GPU platforms; project involving distributed application development.

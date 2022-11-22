@@ -1,23 +1,18 @@
 #!/usr/bin/env python3
 
-"""A Distributed Random Forest Algorithm"""
+
+"""A Distributed Distributed Tree """
+
 
 from mpi4py import MPI
 
 import numpy as np
 import pandas as pd
-from pathlib import Path
-from copy import deepcopy
 from statistics import mode
+from copy import deepcopy
 
-from sklearn.datasets import load_breast_cancer
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
-
-from optbinning import OptimalBinning
-
-
-pd.set_option('mode.chained_assignment', None)
 
 
 comm = MPI.COMM_WORLD
@@ -59,9 +54,7 @@ class Node:
 class DecisionTree:
     """A Rudimentary Decision Tree Classifier"""
     def __init__(self, *, criterion=None):
-        """
-        Pre-pruning criterion = {max_depth, partition_threshold, low_gain}
-        """
+        """Pre-pruning criterion = {max_depth, partition_threshold, low_gain}"""
         self.root = None
         self.levels = None
         self.criterion = criterion
@@ -146,10 +139,11 @@ class DecisionTree:
                                   branch=branch,
                                   parent=parent))
 
-        partitions = [self.partition(X, y, best_feature, t) for t in self.levels[best_feature]]
+        partitions = [self.partition(X, y, best_feature, level) for level in self.levels[best_feature]]
 
-        for *d, t in partitions:
-            best_node.children.append(self.build_tree(*d, parent=best_node, branch=t, depth=depth+1))
+        for *d, level in partitions:
+            best_node.children.append(self.build_tree(*d, parent=best_node, branch=level, depth=depth+1))
+
         return best_node
 
     def fit(self, X, y):
@@ -166,75 +160,48 @@ class DecisionTree:
                     break
         return node.feature
 
-    def score(self, X, y):
-        y_hat = [self.predict(X.iloc[x].to_frame().T) for x in range(len(X))]
-        return accuracy_score(y, y_hat)
+    def score(self, X):
+        return [self.predict(X.iloc[x].to_frame().T) for x in range(len(X))]
 
 
-class RandomForest:
-    def __init__(self, n_sample=2, criterion=None):
-        self.n_sample = n_sample
-        self.tree = None
-        self.criterion = criterion
+def voter(*argv):
+    if len(argv) == 1:
+        return argv[0]
+    for arg in argv:
+        if arg is None: continue
+        return list(map(lambda f: mode(f), list(zip(voter(arg)))))
 
-    def sub_sample(self, X, n_sample=2):
-        """Enforces feature randomness"""
-        return np.random.choice(X.columns.to_numpy(), n_sample, replace=False)
 
-    def bootstrap_sample(self, X, y, n_sample, key=True):
-        feature_subset = self.sub_sample(X, int(np.log2(len(X))))
-        d = pd.concat([X, y], axis=1)
-        d = d.sample(n=n_sample, replace=key)
-        return d.iloc[:, :-1][feature_subset], d.iloc[:, -1]
+MPI_MODE = MPI.Op.Create(voter, commute=True)
 
-    def fit(self, X, y):
-        self.tree = DecisionTree(criterion=self.criterion).fit(*self.bootstrap_sample(X, y, self.n_sample))
-        return self
 
-    def predict(self, X):
-        return [self.tree.predict(X.iloc[x].to_frame().T) for x in range(len(X))]
+def sub_sample(X, n_sample=2):
+    """Enforces feature randomness"""
+    return np.random.choice(X.columns.to_numpy(), n_sample, replace=False)
 
-    def score(self, X, y):
-        buf = []
-        buf.append(comm.bcast(self.predict(X), root=rank))
 
-        # Wait for all processes to finish making their predictions
-        comm.Barrier()
-
-        y_hat = list(map(lambda f: mode(f), np.array(buf).T))
-        return accuracy_score(y, y_hat)
+def bootstrap_sample(X, y, n_sample, key=True):
+    feature_subset = self.sub_sample(X, int(np.log2(len(X))))
+    d = pd.concat([X, y], axis=1)
+    d = d.sample(n=n_sample, replace=key)
+    return d.iloc[:, :-1][feature_subset], d.iloc[:, -1]
 
 
 if __name__ == '__main__':
-    path = Path(r'/home/jason/Desktop/school/dc/distrf/dataset/cancer.pkl')
-
-    if path.is_file():
-        cancer = pd.read_pickle(path)
-        X, y = cancer.iloc[:, :-1], cancer.iloc[:, -1]
-    else:
-        cancer = load_breast_cancer(as_frame=True)
-        X, y = cancer.data, cancer.target
-
-        # Source: http://gnpalencia.org/optbinning/tutorials/tutorial_binary.html
-        for d in X.columns:
-            op = OptimalBinning(name=d, dtype="numerical", solver="cp")
-            op.fit(X[d].values, y)
-            bins = [0] + list(op.splits) + [X[d].max()]
-            X[d] = pd.cut(X[d], bins, labels=range(len(bins)-1))
-
-        for d in ['mean concavity', 'mean concave points', 'concavity error', 'concave points error', 'worst concavity', 'worst concave points']:
-            X[d].fillna(mode(X[d].values), inplace=True)
-
+    df = pd.read_pickle(r'/Users/duong-jason/Desktop/dataset/cancer.pkl')
+    X, y = df.iloc[:, :-1], df.iloc[:, -1]
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.20)
 
     comm.Barrier()
     start_time = MPI.Wtime()
 
-    rf = RandomForest(n_sample=len(X_train), criterion={'max_depth': 4})
-    rf.fit(X_train, y_train)
-    score = rf.score(X_test, y_test)
+    dt = DecisionTree(criterion={'max_depth': 4}).fit(*self.bootstrap_sample(X, y, self.n_sample))
+    score = dt.score(X_test)
+
+    comm.Barrier()
+    y_hat = comm.reduce(score, op=MPI_MODE, root=0)
 
     end_time = MPI.Wtime()
-    if rank == 0:
-        print("Accuracy Score:", score)
-        print("Execution Time:", end_time-start_time)
+    if not rank:
+        print(f"Accuracy Score: {accuracy_score(y_test, y_hat)*100:.2f}%")
+        print(f"Execution Time: {end_time-start_time:.3f}s")
