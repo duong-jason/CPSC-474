@@ -73,13 +73,11 @@ class DecisionTreeEstimator:
         self.n_levels = None
         self.criterion = criterion
 
-    def __repr__(self, node=None, sep='\n'):
+    def __repr__(self, node=None):
         """Displays the decision tree (Pre-Order Traversal)"""
         if not node:
             node = self.root
-        if node.is_leaf:
-            return str(node)
-        return str(node) + sep + sep.join([self.__repr__(child) for child in node.children])
+        return str(node) + ''.join(['\n' + self.__repr__(child) for child in node.children])
 
     def partition(self, X, y, d, t):
         """Returns a subset of the training data with feature (d) of level (t)"""
@@ -100,7 +98,7 @@ class DecisionTreeEstimator:
                     node = child
                     break
             else:
-                raise ValueError(f"Branch {child.feature} -> {x.branch} does not exist")
+                raise ValueError(f"Branch {child.feature} -> {node.branch} does not exist")
         return node
 
     def score(self, X, y):

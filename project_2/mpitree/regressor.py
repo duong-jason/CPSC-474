@@ -6,14 +6,14 @@ class DecisionTreeRegressor(DecisionTreeEstimator):
     def __init__(self, *, criterion={}):
         super().__init__(criterion)
 
-    def variance(self, X, y, d):
+    def variance(self, X, y):
         if len(X) == 1:
             return 0
         return np.sum([(t-mean(y))**2 for t in y]) / (len(X)-1)
 
     def weighted_variance(self, X, y, d):
         weight = lambda t: len(X.loc[X[d]==t]) / len(X)
-        return np.sum([weight(t) * self.variance(X.loc[X[d]==t], y.loc[X[d]==t], d) for t in X[d].unique()])
+        return np.sum([weight(t) * self.variance(X.loc[X[d]==t], y.loc[X[d]==t]) for t in X[d].unique()])
 
     def make_tree(self, X, y, *, parent=None, branch=None, depth=0):
         """
@@ -22,7 +22,7 @@ class DecisionTreeRegressor(DecisionTreeEstimator):
         Base Cases
         ----------
         - all instances have the same target feature values
-        - dataset is empty, return a leaf node labeled with the majority class of the parent
+        - dataset is empty, return a leaf node labeled with the majority class
         - max_depth reached
         - max number of instances in partitioned dataset reached
         """

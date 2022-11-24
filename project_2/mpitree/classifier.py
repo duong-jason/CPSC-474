@@ -35,7 +35,6 @@ class DecisionTreeClassifier(DecisionTreeEstimator):
         entropy = lambda: -np.sum([proba(t) * np.log2(proba(t)) for t in X[d].unique()])
         return self.metric(X, y) - self.rem(X, y, d) / entropy()
 
-
     def make_tree(self, X, y, *, parent=None, branch=None, depth=0):
         """Performs the ID3 algorithm
 
