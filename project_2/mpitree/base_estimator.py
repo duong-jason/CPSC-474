@@ -1,16 +1,15 @@
 import numpy as np
 import pandas as pd
 from copy import deepcopy
-from statistics import mode, mean
 
+from statistics import mode, mean
 from sklearn.metrics import accuracy_score, mean_squared_error
-from sklearn.model_selection import train_test_split
 
 
 class Node:
     """
     A Decision Tree Node
-    
+
     Parameters
     ----------
     feature - the value of a descriptive/target feature of a node
@@ -41,7 +40,7 @@ class Node:
         self.children = children
 
     def __str__(self):
-        return self.depth * '\t' + f" {self.feature} (Branch={self.branch})"
+        return self.depth * '\t' + f"{self.feature} (Branch={self.branch})"
 
     @property
     def is_leaf(self):
@@ -75,12 +74,13 @@ class DecisionTreeEstimator:
 
     def __repr__(self, node=None):
         """Displays the decision tree (Pre-Order Traversal)"""
+        assert self.root is not None
         if not node:
             node = self.root
         return str(node) + ''.join(['\n' + self.__repr__(child) for child in node.children])
 
     def partition(self, X, y, d, t):
-        """Returns a subset of the training data with feature (d) of level (t)"""
+        """Returns a subset of the training data with feature (d) with level (t)"""
         D = pd.concat([X.loc[X[d]==t], y.loc[X[d]==t]], axis=1)
         D = D.drop([d], axis=1)
         return D.iloc[:, :-1], D.iloc[:, -1], t
@@ -98,7 +98,7 @@ class DecisionTreeEstimator:
                     node = child
                     break
             else:
-                raise ValueError(f"Branch {child.feature} -> {node.branch} does not exist")
+                raise ValueError(f"Branch {node.feature} -> {child.branch} does not exist")
         return node
 
     def score(self, X, y):
