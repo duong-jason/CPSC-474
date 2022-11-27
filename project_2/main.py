@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from mpi4py import MPI
 from pickle import load
 from sklearn.model_selection import train_test_split

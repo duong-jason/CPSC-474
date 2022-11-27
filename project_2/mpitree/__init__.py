@@ -1,1 +1,1 @@
-__all__ = ["base_estimator", "classifier", "regressor"]
+__all__ = ["base_estimator", "classifier", "regressor", "random_forest"]

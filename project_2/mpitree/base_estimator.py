@@ -95,9 +95,10 @@ class DecisionTreeEstimator:
             for child in node.children:
                 if child.branch == x.get(node.feature).values:
                     node = child
-                    return node
+                    break
             else:
                 raise ValueError(f"Branch {node.feature} -> {child.branch} does not exist")
+        return node
 
     def score(self, X, y):
         return [self.predict(X.iloc[x].to_frame().T).feature for x in range(len(X))]
