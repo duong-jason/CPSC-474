@@ -10,6 +10,25 @@ rank = comm.Get_rank()
 size = comm.Get_size()
 
 
+
+def voter(*argv):
+    # # https://stackoverflow.com/questions/6208367/regex-to-match-stuff-between-parentheses
+    # import re
+    # if not rank:
+    #     print(str(argv))
+    #     a = re.findall(r'\[([^\)]+)\]', str(argv))  # https://stackoverflow.com/questions/2403122/regular-expression-to-extract-text-between-square-brackets
+    #     b = [i for i in [j for j in a] if i.isdigit()]
+    #     print(a)
+    #     quit()
+    if len(argv) == 1:
+        return argv[0]
+    for arg in argv:
+        if arg is None: continue
+        return list(map(lambda f: mean(f), list(zip(voter(arg)))))
+
+
+MPI_MODE = MPI.Op.Create(voter, commute=True)
+
 class RandomForest:
     def __init__(self, n_sample=0, criterion={}):
         self.n_sample = n_sample
@@ -29,36 +48,11 @@ class RandomForest:
     def fit(self, X, y):
         self.tree = DecisionTreeRegressor(criterion=self.criterion)
         self.tree.fit(*self.bootstrap_sample(X, y, self.n_sample))
-        # print(self.tree)
+        print(rank, self.tree)
         return self
-
-    def predict(self, X):
-        return [self.tree.predict(X.iloc[x].to_frame().T).feature for x in range(len(X))]
 
     def score(self, X, y):
         assert isinstance(self.tree, DecisionTreeRegressor)
-        pred = self.predict(X)
-        comm.Barrier()
-        buf = comm.bcast(pred, root=rank)
-        y_hat = comm.allreduce(np.array(buf).T, op=MPI_MODE)
-        return y_hat
-        # return mean_squared_error(y, y_hat, squared=False)
-
-
-def voter(*argv):
-    # # https://stackoverflow.com/questions/6208367/regex-to-match-stuff-between-parentheses
-    # import re
-    # if not rank:
-    #     print(str(argv))
-    #     a = re.findall(r'\[([^\)]+)\]', str(argv))  # https://stackoverflow.com/questions/2403122/regular-expression-to-extract-text-between-square-brackets
-    #     b = [i for i in [j for j in a] if i.isdigit()]
-    #     print(a)
-    #     quit()
-    if len(argv) == 1:
-        return argv[0]
-    for arg in argv:
-        if arg is None: continue
-        return list(map(lambda f: mean(f), list(zip(voter(arg)))))
-
-
-MPI_MODE = MPI.Op.Create(voter, commute=True)
+        pred = [self.tree.predict(X.iloc[x].to_frame().T).feature for x in range(len(X))]
+        y_hat = comm.allreduce(np.array(pred).T, op=MPI_MODE)
+        return mean_squared_error(y, y_hat, squared=False)

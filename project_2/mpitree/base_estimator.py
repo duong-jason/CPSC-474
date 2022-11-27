@@ -74,7 +74,6 @@ class DecisionTreeEstimator:
 
     def __repr__(self, node=None):
         """Displays the decision tree (Pre-Order Traversal)"""
-        assert self.root is not None
         if not node:
             node = self.root
         return str(node) + ''.join(['\n' + self.__repr__(child) for child in node.children])
@@ -96,10 +95,9 @@ class DecisionTreeEstimator:
             for child in node.children:
                 if child.branch == x.get(node.feature).values:
                     node = child
-                    break
+                    return node
             else:
                 raise ValueError(f"Branch {node.feature} -> {child.branch} does not exist")
-        return node
 
     def score(self, X, y):
         return [self.predict(X.iloc[x].to_frame().T).feature for x in range(len(X))]
