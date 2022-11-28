@@ -28,7 +28,7 @@ def voter(*argv):
         return list(map(lambda f: mean(f), list(zip(voter(arg)))))
 
 
-MPI_MODE = MPI.Op.Create(voter, commute=True)
+AVG = MPI.Op.Create(voter, commute=True)
 
 
 class RandomForest(DecisionTreeClassifier, DecisionTreeRegressor):
@@ -65,5 +65,5 @@ class RandomForest(DecisionTreeClassifier, DecisionTreeRegressor):
         pred = [
             self.tree.predict(X.iloc[x].to_frame().T).feature for x in range(len(X))
         ]
-        y_hat = comm.allreduce(np.array(pred).T, op=MPI_MODE)
+        y_hat = comm.allreduce(np.array(pred).T, op=AVG)
         return mean_squared_error(y, y_hat, squared=False)
