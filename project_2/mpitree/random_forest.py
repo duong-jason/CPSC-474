@@ -10,13 +10,13 @@ rank = comm.Get_rank()
 size = comm.Get_size()
 
 
-
 def voter(*argv):
     # # https://stackoverflow.com/questions/6208367/regex-to-match-stuff-between-parentheses
     # import re
     # if not rank:
     #     print(str(argv))
-    #     a = re.findall(r'\[([^\)]+)\]', str(argv))  # https://stackoverflow.com/questions/2403122/regular-expression-to-extract-text-between-square-brackets
+    #     # https://stackoverflow.com/questions/2403122/regular-expression-to-extract-text-between-square-brackets
+    #     a = re.findall(r'\[([^\)]+)\]', str(argv))
     #     b = [i for i in [j for j in a] if i.isdigit()]
     #     print(a)
     #     quit()
@@ -29,14 +29,16 @@ def voter(*argv):
 
 MPI_MODE = MPI.Op.Create(voter, commute=True)
 
-class RandomForest:
+class RandomForest(DecisionTreeClassifier, DecisionTreeRegressor):
     def __init__(self, n_sample=0, criterion={}):
         self.n_sample = n_sample
         self.criterion = criterion
         self.tree = None
 
     def sub_sample(self, X, n_sample=2):
-        """Enforces feature randomness"""
+        """
+        Enforces feature randomness
+        """
         return np.random.choice(X.columns.to_numpy(), n_sample, replace=False)
 
     def bootstrap_sample(self, X, y, n_sample, key=True):
@@ -50,6 +52,11 @@ class RandomForest:
         self.tree.fit(*self.bootstrap_sample(X, y, self.n_sample))
         print(rank, self.tree)
         return self
+
+    # def predict(self, X):
+    #     pred = [self.tree.predict(X.iloc[x].to_frame().T).feature for x in range(len(X))]
+    #     y_hat = comm.allreduce(np.array(pred).T, op=MPI_MODE)
+    #     return y_hat
 
     def score(self, X, y):
         assert isinstance(self.tree, DecisionTreeRegressor)

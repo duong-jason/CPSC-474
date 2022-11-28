@@ -21,12 +21,19 @@ if __name__ == '__main__':
     comm.Barrier()
     start_time = MPI.Wtime()
 
-    dt_regr = RandomForest(n_sample=len(X_train), criterion={'max_depth': 1})
+    dt_regr = RandomForest(n_sample=len(X_train))
     dt_regr.fit(X_train, y_train)
 
     score = dt_regr.score(X_test, y_test)
+    # query = pd.DataFrame({
+    #     "Anime Title": ["Sword Art Online"],
+    #     "Source Material": ["Novel"],
+    #     "Demographic": ["Seinen"],
+    # })
+    # pred = dt_regr.predict(query)
 
     end_time = MPI.Wtime()
     if not rank:
         print(f"MSE Score: {score:.2f}")
+        # print("Prediction:", pred)
         print(f"Execution Time: {end_time-start_time:.3f}s")

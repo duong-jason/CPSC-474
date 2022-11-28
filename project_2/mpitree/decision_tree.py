@@ -1,12 +1,21 @@
 from .base_estimator import *
 
+import numpy as np
+from copy import deepcopy
+
+from statistics import mode, mean
+from sklearn.metrics import accuracy_score, mean_squared_error
+
 
 class DecisionTreeClassifier(DecisionTreeEstimator):
     """A Rudimentary Decision Tree Classifier"""
     def __init__(self, *, metric="entropy", eval="info_gain", criterion={}):
         """
-        Metric: {gain, gini}
-        Eval: {info_gain, gain_ratio}
+        Metric
+            - {gain, gini}
+
+        Eval
+            - {info_gain, gain_ratio}
         """
         super().__init__(criterion)
         self.metric = self.entropy if metric == "entropy" else self.gini
@@ -17,17 +26,25 @@ class DecisionTreeClassifier(DecisionTreeEstimator):
         return 1 - np.sum([proba(t)**2 for t in y.unique()])
 
     def entropy(self, X, y):
-        """Measures the amount of uncertainty/impurity/heterogeneity in (X, y)"""
+        """
+        Measures the amount of uncertainty/impurity/heterogeneity in (X, y)
+        """
         proba = lambda t: len(X.loc[y==t]) / len(X)
         return -np.sum([proba(t) * np.log2(proba(t)) for t in y.unique()])
 
     def rem(self, X, y, d):
-        """Measures the entropy after partitioning (X, y) on feature (d)"""
+        """
+        Measures the entropy after partitioning (X, y) on feature (d)
+        """
         weight = lambda t: len(X.loc[X[d]==t]) / len(X)
-        return np.sum([weight(t) * self.metric(X.loc[X[d]==t], y.loc[X[d]==t]) for t in X[d].unique()])
+        return np.sum(
+            [weight(t) * self.metric(X.loc[X[d]==t], y.loc[X[d]==t]) for t in X[d].unique()
+        ])
 
     def information_gain(self, X, y, d):
-        """Measures the reduction in the overall entropy in (X, y) achieved by testing on feature (d)"""
+        """
+        Measures the reduction in the overall entropy in (X, y) achieved by testing on feature (d)
+        """
         return self.metric(X, y) - self.rem(X, y, d)
 
     def information_gain_ratio(self, X, y, d):
@@ -46,12 +63,13 @@ class DecisionTreeClassifier(DecisionTreeEstimator):
         - max_depth reached
         - max number of instances in partitioned dataset reached
         """
-        make_node = lambda f, t: Node(feature=f, data=pd.concat([X, y], axis=1), branch=branch, parent=parent, depth=depth, leaf=t)
+        make_node = lambda f, t: Node(feature=f, data=pd.concat([X, y], axis=1),
+                                   branch=branch, parent=parent, depth=depth, leaf=t)
 
         if len(y.unique()) == 1:
             return make_node(y.iat[0], True)
         elif X.empty:
-            return make_node(mode(parent.y), True)
+            return make_node(mode(parent.y))
         elif all((X[d] == X[d].iloc[0]).all() for d in X.columns):
             return make_node(mode(y), True)
         if self.criterion.get("max_depth", float('inf')) <= depth:
@@ -67,10 +85,13 @@ class DecisionTreeClassifier(DecisionTreeEstimator):
         best_feature = X.columns[max_gain]
         best_node = deepcopy(make_node(best_feature, False))
 
-        X_levels = [self.partition(X, y, best_feature, level) for level in self.n_levels[best_feature]]
+        X_levels = [self.partition(X, y, best_feature, level)
+                    for level in self.n_levels[best_feature]]
 
         for *d, level in X_levels:
-            best_node.children.append(self.make_tree(*d, parent=best_node, branch=level, depth=depth+1))
+            best_node.children.append(
+                self.make_tree(*d, parent=best_node, branch=level, depth=depth+1)
+            )
         return best_node
 
     def score(self, X, y):
@@ -90,7 +111,9 @@ class DecisionTreeRegressor(DecisionTreeEstimator):
 
     def weighted_variance(self, X, y, d):
         weight = lambda t: len(X.loc[X[d]==t]) / len(X)
-        return np.sum([weight(t) * self.variance(X.loc[X[d]==t], y.loc[X[d]==t]) for t in X[d].unique()])
+        return np.sum(
+            [weight(t) * self.variance(X.loc[X[d]==t], y.loc[X[d]==t]) for t in X[d].unique()]
+        )
 
     def make_tree(self, X, y, *, parent=None, branch=None, depth=0):
         """
@@ -103,7 +126,8 @@ class DecisionTreeRegressor(DecisionTreeEstimator):
         - max_depth reached
         - max number of instances in partitioned dataset reached
         """
-        make_node = lambda f, t: Node(feature=f, data=pd.concat([X, y], axis=1), branch=branch, parent=parent, depth=depth, leaf=t)
+        make_node = lambda f, t: Node(feature=f, data=pd.concat([X, y], axis=1),
+                                      branch=branch, parent=parent, depth=depth, leaf=t)
 
         if len(y.unique()) == 1:
             return make_node(y.iat[0], True)
@@ -119,10 +143,13 @@ class DecisionTreeRegressor(DecisionTreeEstimator):
         best_feature = X.columns[min_var]
         best_node = deepcopy(make_node(best_feature, False))
 
-        X_levels = [self.partition(X, y, best_feature, level) for level in self.n_levels[best_feature]]
+        X_levels = [self.partition(X, y, best_feature, level)
+                    for level in self.n_levels[best_feature]]
 
         for *d, level in X_levels:
-            best_node.children.append(self.make_tree(*d, parent=best_node, branch=level, depth=depth+1))
+            best_node.children.append(
+                self.make_tree(*d, parent=best_node, branch=level, depth=depth+1)
+            )
         return best_node
 
     def score(self, X, y):
