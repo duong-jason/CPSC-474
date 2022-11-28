@@ -23,11 +23,13 @@ def voter(*argv):
     if len(argv) == 1:
         return argv[0]
     for arg in argv:
-        if arg is None: continue
+        if arg is None:
+            continue
         return list(map(lambda f: mean(f), list(zip(voter(arg)))))
 
 
 MPI_MODE = MPI.Op.Create(voter, commute=True)
+
 
 class RandomForest(DecisionTreeClassifier, DecisionTreeRegressor):
     def __init__(self, n_sample=0, criterion={}):
@@ -60,6 +62,8 @@ class RandomForest(DecisionTreeClassifier, DecisionTreeRegressor):
 
     def score(self, X, y):
         assert isinstance(self.tree, DecisionTreeRegressor)
-        pred = [self.tree.predict(X.iloc[x].to_frame().T).feature for x in range(len(X))]
+        pred = [
+            self.tree.predict(X.iloc[x].to_frame().T).feature for x in range(len(X))
+        ]
         y_hat = comm.allreduce(np.array(pred).T, op=MPI_MODE)
         return mean_squared_error(y, y_hat, squared=False)

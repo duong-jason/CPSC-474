@@ -31,6 +31,7 @@ class Node:
     children
         - the nodes resulting from each unique feature value of the parent
     """
+
     feature: ...
     data: pd.DataFrame.dtypes
     branch: ...
@@ -40,7 +41,7 @@ class Node:
     children: list[Node] = field(default_factory=list)
 
     def __str__(self):
-        return self.depth * '\t' + f"{self.feature} (Branch={self.branch})"
+        return self.depth * "\t" + f"{self.feature} (Branch={self.branch})"
 
     @property
     def is_leaf(self):
@@ -66,6 +67,7 @@ class Node:
 
 class DecisionTreeEstimator:
     """A Decision Tree Estimator"""
+
     def __init__(self, criterion={}):
         """
         Parameters
@@ -89,13 +91,15 @@ class DecisionTreeEstimator:
         """
         if not node:
             node = self.root
-        return str(node) + ''.join(['\n' + self.__repr__(child) for child in node.children])
+        return str(node) + "".join(
+            ["\n" + self.__repr__(child) for child in node.children]
+        )
 
     def partition(self, X, y, d, t):
         """
         Returns a subset of the training data with feature (d) with level (t)
         """
-        D = pd.concat([X.loc[X[d]==t], y.loc[X[d]==t]], axis=1)
+        D = pd.concat([X.loc[X[d] == t], y.loc[X[d] == t]], axis=1)
         D = D.drop([d], axis=1)
         return D.iloc[:, :-1], D.iloc[:, -1], t
 

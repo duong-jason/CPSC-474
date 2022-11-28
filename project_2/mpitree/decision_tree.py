@@ -9,6 +9,7 @@ from sklearn.metrics import accuracy_score, mean_squared_error
 
 class DecisionTreeClassifier(DecisionTreeEstimator):
     """A Rudimentary Decision Tree Classifier"""
+
     def __init__(self, *, metric="entropy", eval="info_gain", criterion={}):
         """
         Metric
@@ -19,27 +20,30 @@ class DecisionTreeClassifier(DecisionTreeEstimator):
         """
         super().__init__(criterion)
         self.metric = self.entropy if metric == "entropy" else self.gini
-        self.eval = self.information_gain if eval == "info_gain" else self.information_gain_ratio
+        self.eval = (
+            self.information_gain
+            if eval == "info_gain"
+            else self.information_gain_ratio
+        )
 
     def gini(self, X, y):
-        proba = lambda t: len(X.loc[y==t]) / len(X)
-        return 1 - np.sum([proba(t)**2 for t in y.unique()])
+        proba = lambda t: len(X.loc[y == t]) / len(X)
+        return 1 - np.sum([proba(t) ** 2 for t in y.unique()])
 
     def entropy(self, X, y):
         """
         Measures the amount of uncertainty/impurity/heterogeneity in (X, y)
         """
-        proba = lambda t: len(X.loc[y==t]) / len(X)
+        proba = lambda t: len(X.loc[y == t]) / len(X)
         return -np.sum([proba(t) * np.log2(proba(t)) for t in y.unique()])
 
     def rem(self, X, y, d):
         """
         Measures the entropy after partitioning (X, y) on feature (d)
         """
-        weight = lambda t: len(X.loc[X[d]==t]) / len(X)
-        return np.sum(
-            [weight(t) * self.metric(X.loc[X[d]==t], y.loc[X[d]==t]) for t in X[d].unique()
-        ])
+        weight = lambda t: len(X.loc[X[d] == t]) / len(X)
+        return np.sum([weight(t) * self.metric(X.loc[X[d] == t], y.loc[X[d] == t])
+                       for t in X[d].unique()])
 
     def information_gain(self, X, y, d):
         """
@@ -48,7 +52,7 @@ class DecisionTreeClassifier(DecisionTreeEstimator):
         return self.metric(X, y) - self.rem(X, y, d)
 
     def information_gain_ratio(self, X, y, d):
-        proba = lambda t: len(X.loc[X[d]==t]) / len(X)
+        proba = lambda t: len(X.loc[X[d] == t]) / len(X)
         entropy = lambda: -np.sum([proba(t) * np.log2(proba(t)) for t in X[d].unique()])
         return self.metric(X, y) - self.rem(X, y, d) / entropy()
 
@@ -63,8 +67,14 @@ class DecisionTreeClassifier(DecisionTreeEstimator):
         - max_depth reached
         - max number of instances in partitioned dataset reached
         """
-        make_node = lambda f, t: Node(feature=f, data=pd.concat([X, y], axis=1),
-                                   branch=branch, parent=parent, depth=depth, leaf=t)
+        make_node = lambda f, t: Node(
+            feature=f,
+            data=pd.concat([X, y], axis=1),
+            branch=branch,
+            parent=parent,
+            depth=depth,
+            leaf=t,
+        )
 
         if len(y.unique()) == 1:
             return make_node(y.iat[0], True)
@@ -72,25 +82,27 @@ class DecisionTreeClassifier(DecisionTreeEstimator):
             return make_node(mode(parent.y))
         elif all((X[d] == X[d].iloc[0]).all() for d in X.columns):
             return make_node(mode(y), True)
-        if self.criterion.get("max_depth", float('inf')) <= depth:
+        if self.criterion.get("max_depth", float("inf")) <= depth:
             return make_node(mode(y), True)
-        if self.criterion.get("partition_threshold", float('-inf')) >= len(X):
+        if self.criterion.get("partition_threshold", float("-inf")) >= len(X):
             return make_node(mode(y), True)
 
         max_gain = np.argmax([self.eval(X, y, d) for d in X.columns])
 
-        if self.criterion.get('low_gain', float('-inf')) >= max_gain:
+        if self.criterion.get("low_gain", float("-inf")) >= max_gain:
             return make_node(mode(y), True)
 
         best_feature = X.columns[max_gain]
         best_node = deepcopy(make_node(best_feature, False))
 
-        X_levels = [self.partition(X, y, best_feature, level)
-                    for level in self.n_levels[best_feature]]
+        X_levels = [
+            self.partition(X, y, best_feature, level)
+            for level in self.n_levels[best_feature]
+        ]
 
         for *d, level in X_levels:
             best_node.children.append(
-                self.make_tree(*d, parent=best_node, branch=level, depth=depth+1)
+                self.make_tree(*d, parent=best_node, branch=level, depth=depth + 1)
             )
         return best_node
 
@@ -101,19 +113,19 @@ class DecisionTreeClassifier(DecisionTreeEstimator):
 
 class DecisionTreeRegressor(DecisionTreeEstimator):
     """A Rudimentary Decision Tree Regressor"""
+
     def __init__(self, *, criterion={}):
         super().__init__(criterion)
 
     def variance(self, X, y):
         if len(X) == 1:
             return 0
-        return np.sum([(t-mean(y))**2 for t in y]) / (len(X)-1)
+        return np.sum([(t - mean(y)) ** 2 for t in y]) / (len(X) - 1)
 
     def weighted_variance(self, X, y, d):
-        weight = lambda t: len(X.loc[X[d]==t]) / len(X)
-        return np.sum(
-            [weight(t) * self.variance(X.loc[X[d]==t], y.loc[X[d]==t]) for t in X[d].unique()]
-        )
+        weight = lambda t: len(X.loc[X[d] == t]) / len(X)
+        return np.sum([weight(t) * self.variance(X.loc[X[d] == t], y.loc[X[d] == t])
+                      for t in X[d].unique()])
 
     def make_tree(self, X, y, *, parent=None, branch=None, depth=0):
         """
@@ -126,16 +138,22 @@ class DecisionTreeRegressor(DecisionTreeEstimator):
         - max_depth reached
         - max number of instances in partitioned dataset reached
         """
-        make_node = lambda f, t: Node(feature=f, data=pd.concat([X, y], axis=1),
-                                      branch=branch, parent=parent, depth=depth, leaf=t)
+        make_node = lambda f, t: Node(
+            feature=f,
+            data=pd.concat([X, y], axis=1),
+            branch=branch,
+            parent=parent,
+            depth=depth,
+            leaf=t,
+        )
 
         if len(y.unique()) == 1:
             return make_node(y.iat[0], True)
         elif X.empty:
             return make_node(mean(y), True)
-        if self.criterion.get("max_depth", float('inf')) <= depth:
+        if self.criterion.get("max_depth", float("inf")) <= depth:
             return make_node(mean(y), True)
-        if self.criterion.get("partition_threshold", float('-inf')) >= len(X):
+        if self.criterion.get("partition_threshold", float("-inf")) >= len(X):
             return make_node(mean(y), True)
 
         min_var = np.argmin([self.weighted_variance(X, y, d) for d in X.columns])
@@ -143,12 +161,14 @@ class DecisionTreeRegressor(DecisionTreeEstimator):
         best_feature = X.columns[min_var]
         best_node = deepcopy(make_node(best_feature, False))
 
-        X_levels = [self.partition(X, y, best_feature, level)
-                    for level in self.n_levels[best_feature]]
+        X_levels = [
+            self.partition(X, y, best_feature, level)
+            for level in self.n_levels[best_feature]
+        ]
 
         for *d, level in X_levels:
             best_node.children.append(
-                self.make_tree(*d, parent=best_node, branch=level, depth=depth+1)
+                self.make_tree(*d, parent=best_node, branch=level, depth=depth + 1)
             )
         return best_node
 
