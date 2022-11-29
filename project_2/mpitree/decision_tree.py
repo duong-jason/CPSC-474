@@ -79,7 +79,7 @@ class DecisionTreeClassifier(DecisionTreeEstimator):
         if len(y.unique()) == 1:
             return make_node(y.iat[0], True)
         elif X.empty:
-            return make_node(mode(parent.y))
+            return make_node(mode(parent.y), True)
         elif all((X[d] == X[d].iloc[0]).all() for d in X.columns):
             return make_node(mode(y), True)
         if self.criterion.get("max_depth", float("inf")) <= depth:

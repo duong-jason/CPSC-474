@@ -33,7 +33,7 @@ if __name__ == "__main__":
     #     "Source Material": ["Novel"],
     #     "Demographic": ["Seinen"],
     # })
-    # pred = dt_regr.predict(query)
+    # pred = dt_regr.predict(query).feature
 
     end_time = MPI.Wtime()
     if not rank:
