@@ -14,10 +14,7 @@ For example: The $Occupation$ feature, with $Lawyer$, $Teacher$, and $Doctor$ as
 
 In correspondence to overfitting, we enable pre-pruning criterions for decision trees where the algorithm stops growing on a path after some stage. These criterions may be when the depth of the tree, the number of instances in a partitioned dataset, or the amount of information gained exceeds a pre-defined threshold.
 
-## Future Work
-As of now, our decision tree implementation requires categorical feature values to run the *ID3 Algorithm*, implying non-existence of duplicate features on any path from the root. We plan to enable our decision tree models to make predictions for continuous feature values using *information gain* to find an optimal threshold for a feature when being tested. This implies that there may be duplicate features on any path from the root as it resembles a binary search structure.
-
 ## How to Run
 ```bash
-mpiexec -n <number_of_processes> python3 main.py
+mpiexec -n <ranks> python3 main.py
 ```
