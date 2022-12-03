@@ -32,7 +32,7 @@ AVG = MPI.Op.Create(voter, commute=True)
 
 
 class RandomForest(DecisionTreeClassifier, DecisionTreeRegressor):
-    def __init__(self, n_sample=0, criterion={}):
+    def __init__(self, n_sample=2, criterion={}):
         self.n_sample = n_sample
         self.criterion = criterion
         self.tree = None
@@ -54,11 +54,6 @@ class RandomForest(DecisionTreeClassifier, DecisionTreeRegressor):
         self.tree.fit(*self.bootstrap_sample(X, y, self.n_sample))
         print(rank, self.tree)
         return self
-
-    # def predict(self, X):
-    #     pred = [self.tree.predict(X.iloc[x].to_frame().T).feature for x in range(len(X))]
-    #     y_hat = comm.allreduce(np.array(pred).T, op=MPI_MODE)
-    #     return y_hat
 
     def score(self, X, y):
         assert isinstance(self.tree, DecisionTreeRegressor)

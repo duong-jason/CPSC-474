@@ -28,12 +28,6 @@ if __name__ == "__main__":
     dt_regr.fit(X_train, y_train)
 
     score = dt_regr.score(X_test, y_test)
-    # query = pd.DataFrame({
-    #     "Anime Title": ["Sword Art Online"],
-    #     "Source Material": ["Novel"],
-    #     "Demographic": ["Seinen"],
-    # })
-    # pred = dt_regr.predict(query).feature
 
     end_time = MPI.Wtime()
     if not rank:

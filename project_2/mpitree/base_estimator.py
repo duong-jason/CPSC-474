@@ -1,6 +1,9 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
+
+import numpy as np
 import pandas as pd
+from pandas.api.types import is_numeric_dtype
 
 
 @dataclass(kw_only=True)
@@ -41,7 +44,7 @@ class Node:
     children: list[Node] = field(default_factory=list)
 
     def __str__(self):
-        return self.depth * "\t" + f"{self.feature} (Branch={self.branch})"
+        return self.depth * "\t" + f"{self.feature} (Branch: {self.branch})"
 
     @property
     def is_leaf(self):
@@ -64,6 +67,20 @@ class Node:
         """
         return self.data.iloc[:, -1]
 
+    @property
+    def left(self):
+        """
+        Returns the left child
+        """
+        return self.children[0]
+
+    @property
+    def right(self):
+        """
+        Returns the right child
+        """
+        return self.children[1]
+
 
 class DecisionTreeEstimator:
     """A Decision Tree Estimator"""
@@ -84,6 +101,7 @@ class DecisionTreeEstimator:
         self.root = None
         self.n_levels = None
         self.criterion = criterion
+        self.optimal_threshold = {}
 
     def __repr__(self, node=None):
         """
@@ -94,6 +112,30 @@ class DecisionTreeEstimator:
         return str(node) + "".join(
             ["\n" + self.__repr__(child) for child in node.children]
         )
+
+    def find_optimal_threshold(self, df, d):
+        thresholds = []
+        for i in range(len(df) - 1):
+            pairs = df.iloc[i : i+2, -1]
+            if any(pairs.iloc[0] != val for val in pairs.values):
+                thresholds.append(df.loc[pairs.index, d].mean())
+
+        levels = []
+        for threshold in thresholds:
+            X_a, X_b = df.loc[df[d] < threshold], df.loc[df[d] >= threshold]
+
+            weight_left = len(X_a.loc[X_a[d] < threshold]) / len(df)
+            weight_right = len(X_b.loc[X_b[d] >= threshold]) / len(df)
+
+            metric = self.metric(df.iloc[:, :-1], df.iloc[:, -1])
+            metric_left = self.metric(X_a.iloc[:, :-1], X_a.iloc[:, -1])
+            metric_right = self.metric(X_b.iloc[:, :-1], X_b.iloc[:, -1])
+
+            rem = metric_left * weight_left + metric_right * weight_right
+
+            levels.append(metric - rem)
+
+        return max(levels), thresholds[np.argmax(levels)]
 
     def partition(self, X, y, d, t):
         """
@@ -111,14 +153,18 @@ class DecisionTreeEstimator:
     def predict(self, x):
         node = self.root
         while not node.is_leaf:
-            for child in node.children:
-                if child.branch == x.get(node.feature).values:
-                    node = child
-                    break
+            query_branch = x.get(node.feature).values
+            if is_numeric_dtype(query_branch):
+                node = node.left if node.left.branch < query_branch else node.right
             else:
-                raise ValueError(
-                    f"Branch {node.feature} -> {x.get(node.feature).values} does not exist"
-                )
+                for child in node.children:
+                    if child.branch == query_branch:
+                        node = child
+                        break
+                else:
+                    raise ValueError(
+                        f"Branch {node.feature} -> {x.get(node.feature).values} does not exist"
+                    )
         return node
 
     def score(self, X, y):

@@ -1,8 +1,6 @@
 from .base_estimator import *
 
-import numpy as np
 from copy import deepcopy
-
 from statistics import mode, mean
 from sklearn.metrics import accuracy_score, mean_squared_error
 
@@ -49,6 +47,15 @@ class DecisionTreeClassifier(DecisionTreeEstimator):
         """
         Measures the reduction in the overall entropy in (X, y) achieved by testing on feature (d)
         """
+        if is_numeric_dtype(X[d]):
+            df = pd.concat([X, y], axis=1)
+            df.sort_values(by=[d], inplace=True)
+            gain, optimal_threshold = self.find_optimal_threshold(df, d)
+
+            self.optimal_threshold[d] = optimal_threshold
+
+            return gain
+
         return self.metric(X, y) - self.rem(X, y, d)
 
     def information_gain_ratio(self, X, y, d):
@@ -95,10 +102,16 @@ class DecisionTreeClassifier(DecisionTreeEstimator):
         best_feature = X.columns[max_gain]
         best_node = deepcopy(make_node(best_feature, False))
 
-        X_levels = [
-            self.partition(X, y, best_feature, level)
-            for level in self.n_levels[best_feature]
-        ]
+        if is_numeric_dtype(X[best_feature]):
+            eps = self.optimal_threshold[best_feature]
+            left = [X.loc[X[best_feature] < eps], y.loc[X[best_feature] < eps], eps]
+            right = [X.loc[X[best_feature] >= eps], y.loc[X[best_feature] >= eps], eps]
+            X_levels = [left, right]
+        else:
+            X_levels = [
+                self.partition(X, y, best_feature, level)
+                for level in self.n_levels[best_feature]
+            ]
 
         for *d, level in X_levels:
             best_node.children.append(
@@ -116,6 +129,7 @@ class DecisionTreeRegressor(DecisionTreeEstimator):
 
     def __init__(self, *, criterion={}):
         super().__init__(criterion)
+        self.metric = self.variance
 
     def variance(self, X, y):
         if len(X) == 1:
@@ -123,9 +137,18 @@ class DecisionTreeRegressor(DecisionTreeEstimator):
         return np.sum([(t - mean(y)) ** 2 for t in y]) / (len(X) - 1)
 
     def weighted_variance(self, X, y, d):
+        if is_numeric_dtype(X[d]):
+            df = pd.concat([X, y], axis=1)
+            df.sort_values(by=[d], inplace=True)
+            gain, optimal_threshold = self.find_optimal_threshold(df, d)
+
+            self.optimal_threshold[d] = optimal_threshold
+
+            return gain
+
         weight = lambda t: len(X.loc[X[d] == t]) / len(X)
-        return np.sum([weight(t) * self.variance(X.loc[X[d] == t], y.loc[X[d] == t])
-                      for t in X[d].unique()])
+        return np.sum([weight(t) * self.metric(X.loc[X[d] == t], y.loc[X[d] == t])
+                       for t in X[d].unique()])
 
     def make_tree(self, X, y, *, parent=None, branch=None, depth=0):
         """
@@ -161,10 +184,16 @@ class DecisionTreeRegressor(DecisionTreeEstimator):
         best_feature = X.columns[min_var]
         best_node = deepcopy(make_node(best_feature, False))
 
-        X_levels = [
-            self.partition(X, y, best_feature, level)
-            for level in self.n_levels[best_feature]
-        ]
+        if is_numeric_dtype(X[best_feature]):
+            eps = self.optimal_threshold[best_feature]
+            left = [X.loc[X[best_feature] < eps], y.loc[X[best_feature] < eps], eps]
+            right = [X.loc[X[best_feature] >= eps], y.loc[X[best_feature] >= eps], eps]
+            X_levels = [left, right]
+        else:
+            X_levels = [
+                self.partition(X, y, best_feature, level)
+                for level in self.n_levels[best_feature]
+            ]
 
         for *d, level in X_levels:
             best_node.children.append(
