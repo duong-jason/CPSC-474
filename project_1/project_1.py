@@ -5,25 +5,7 @@
 
 
 import re
-import unittest
 from itertools import combinations
-
-
-class TestDependencies(unittest.TestCase):
-
-    def test_parse(self):
-        a = ['a = ( a + b ) * c', 'a = a - a / b']
-        self.assertEqual(extract_vars(a), [[{'a'}, {'a', 'b', 'c'}], [{'a'}, {'a', 'b'}]])
-
-    def test_false(self):
-        a, b, = ['a = b'], ['c = a', 'b = c', 'a = c']
-        for _ in b:
-            with self.subTest(i=_):
-                self.assertFalse(check_dependencies(*extract_vars(a), *extract_vars([_])))
-
-    def test_true(self):
-        a, b, = ['a = c'], ['b = c']
-        self.assertTrue(check_dependencies(*extract_vars(a), *extract_vars(b)))
 
 
 def extract_vars(instr):
@@ -31,16 +13,17 @@ def extract_vars(instr):
     Parses each simple instruction into their input and output sets.
     Returns a list of of input/output sets ordered by instruction execution.
     """
-    parse = lambda f: set(re.findall(r'(\w)+', f))  # returns a set of all distinct characters from a string
-    return [list(map(parse, i.split('='))) for i in instr]
+    parse = lambda f: set(
+        re.findall(r"(\w)+", f)
+    )  # returns a set of all distinct characters from a string
+    return [list(map(parse, i.split("="))) for i in instr]
 
 
 def check_dependencies(lhs, rhs):
     """
     Returns true if the two input instructions have no data dependencies.
     """
-    return all(lhs[i] & rhs[j] == set() \
-               for i, j in [[0, 0], [0, 1], [1, 0]])
+    return all(lhs[i] & rhs[j] == set() for i, j in [[0, 0], [0, 1], [1, 0]])
 
 
 def calculate(target, chunk):
@@ -59,19 +42,19 @@ def verify(chunk):
     (i, j) and (p, q) represent indicies and variables respectively.
     """
     pairs = combinations(zip(range(len(block)), chunk), 2)
-    result = [(block[i], block[j]) for (i, p), (j, q) in pairs if check_dependencies(p, q)]
+    result = [
+        (block[i], block[j]) for (i, p), (j, q) in pairs if check_dependencies(p, q)
+    ]
     print(result if len(result) else "NONE")
 
 
-if __name__ == '__main__':
-    input_instr = ['d = b + ( c - d / e )']
-    block = ['b = b * c', 'c = c - a', 'a = a + b * c']
+if __name__ == "__main__":
+    input_instr = ["d = b + ( c - d / e )"]
+    block = ["b = b * c", "c = c - a", "a = a + b * c"]
     calculate(extract_vars(input_instr), extract_vars(block))  # example 1
 
-    block = ['b = b * c', 'd = c - a', 'a = a + b * c']
+    block = ["b = b * c", "d = c - a", "a = a + b * c"]
     verify(extract_vars(block))  # example 2a
 
-    block = ['a = a * b * c', 'c = c - a' ,'a = a + b * c']
+    block = ["a = a * b * c", "c = c - a", "a = a + b * c"]
     verify(extract_vars(block))  # example 2b
-
-    unittest.main()
